@@ -206,12 +206,11 @@ class CharacterForm:
                                        "Long Hair","Short Hair","Curly Hair","Wavy Hair","Straight Hair","Ponytail",
                                        "Multiple Braids","White Streak","Graying Temples","Stubble Beard","Groomed Beard","Sideburns"]),
             "Notable Traits": sorted_en([
-                # generic
                 "Heterochromia","Scar","Missing Eye","Burn Marks","Soot-covered","Blood Spatter","Veins Visible",
                 "Runes Etched in Skin","Cracked Skin","Blindfolded","Blind Eye","Skeletal Features","Tattooed Face",
                 "Facial Piercings","Tattoos","Multiple Scars","Pale Skin","Dried Blood","Glowing Eyes","Tribal Markings",
                 "Facial Jewelry","Multiple Ear Rings",
-                # orcish markers (useful beyond half-orc as manual overrides)
+                # orcish markers
                 "Small lower tusks clearly visible","Pronounced jawline","Heavy brow ridge","Broad nose",
                 "Slightly pointed ears","Rough textured skin with visible pores",
                 "Mouth slightly open, lower tusks visible",
@@ -232,19 +231,16 @@ class CharacterForm:
                                   "Slight High Angle","Low Angle","Over-the-Shoulder","Includes mouth and jaw"])
         }
 
-        # race preset state
         self._race_auto_lines = []
         self._race_avoid_line = ""
 
-        # build UI
         self._build_ui()
 
     def _build_ui(self):
         tk.Label(self.frame, text="Render style", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(8,0))
         tk.OptionMenu(self.frame, self.style_var, *self.styles_map.keys()).pack(anchor="w", padx=20, pady=(0,8))
 
-        # singles (with "Other")
-        self.single_vars = {}       # cat -> (menu_var, other_var)
+        self.single_vars = {}
         self.single_block = tk.LabelFrame(self.frame, text="Main characteristics", font=("Arial", 10, "bold"))
         self.single_block.pack(anchor="w", fill="x", padx=10, pady=6)
         self._single_cells = []
@@ -253,11 +249,9 @@ class CharacterForm:
             cell = tk.Frame(self.single_block)
             tk.Label(cell, text=cat, font=("Arial", 10, "bold"), anchor="w").pack(anchor="w")
             var = tk.StringVar(value="— (leave empty) —")
-            # attach race change hook
             if cat == "Race":
-                def on_change(*_):
-                    self._apply_race_preset(var.get())
-                var.trace_add("write", on_change)
+                # FIX: capture the right variable for this cell
+                var.trace_add("write", lambda *_a, v=var: self._apply_race_preset(v.get()))
             tk.OptionMenu(cell, var, "— (leave empty) —", *options).pack(fill="x", pady=(2,2))
             other = tk.StringVar()
             tk.Entry(cell, textvariable=other).pack(fill="x")
@@ -266,11 +260,9 @@ class CharacterForm:
             self._single_cells.append(cell)
 
             if cat == "Race":
-                # hint label for preset
                 self.race_hint = tk.Label(cell, text="", fg="#666", wraplength=420, justify="left")
                 self.race_hint.pack(anchor="w", pady=(6,0))
 
-        # multis (checkboxes) with "Other"
         self.check_blocks = {}
         for category, options in self.multi_categories.items():
             block = tk.LabelFrame(self.frame, text=category, font=("Arial", 10, "bold"))
@@ -287,13 +279,11 @@ class CharacterForm:
             lab.grid(row=1, column=0, sticky="w", padx=8, pady=(0,6))
             self.check_blocks[category] = {"frame": block, "labels": labels, "items": items, "bottom": bottom, "other_var": other_var}
 
-        # actions + output
         tk.Button(self.frame, text="🎨 Generate prompt", command=self.generate_prompt).pack(pady=10)
         self.output = tk.Text(self.frame, height=8, wrap="word")
         self.output.pack(padx=10, pady=10, fill="both", expand=True)
         tk.Button(self.frame, text="📋 Copy window", command=self.open_copy_window).pack(pady=(0,10))
 
-        # responsive layout
         self._last_cols = None
         self.frame.bind("<Configure>", self._on_resize)
         self._relayout()
@@ -307,7 +297,6 @@ class CharacterForm:
         if preset:
             self._race_auto_lines = list(preset.get("lines", []))
             self._race_avoid_line = preset.get("avoid", "")
-            # show a short summary
             hint = "Race preset added: " + " ".join(self._race_auto_lines)
             if self._race_avoid_line:
                 hint += f"  [Avoid: {self._race_avoid_line}]"
@@ -316,7 +305,6 @@ class CharacterForm:
             self._race_auto_lines = []; self._race_avoid_line = ""
             self.race_hint.configure(text="")
 
-    # layout
     def _columns_for_width(self, w):
         if not self.columns_mode:
             return 1
@@ -331,7 +319,6 @@ class CharacterForm:
         cols = self._columns_for_width(w)
         if cols == self._last_cols: return
         self._last_cols = cols
-        # grid cells
         for wdg in self.single_block.grid_slaves(): wdg.grid_forget()
         n = len(self._single_cells)
         rows = max(1, math.ceil(n/cols))
@@ -339,7 +326,6 @@ class CharacterForm:
             r, c = i % rows, i // rows
             self.single_block.grid_columnconfigure(c, weight=1, uniform="singcols")
             cell.grid(row=r, column=c, sticky="nsew", padx=8, pady=6)
-        # grid multi blocks with same columns
         for cat, data in self.check_blocks.items():
             block = data["frame"]; labels = data["labels"]; bottom = data["bottom"]
             for wdg in block.grid_slaves(): wdg.grid_forget()
@@ -353,7 +339,6 @@ class CharacterForm:
 
     def _on_resize(self, _e=None): self._relayout()
 
-    # data access
     def get_single_choice(self, cat):
         var, other = self.single_vars[cat]
         txt = other.get().strip()
@@ -370,18 +355,20 @@ class CharacterForm:
         intro = self.styles_map.get(self.style_var.get(), next(iter(self.styles_map.values())))
         lines = [intro]
 
-        # subject
         race = self.get_single_choice("Race")
         gender = self.get_single_choice("Gender")
         role   = self.get_single_choice("Role / Class")
+
+        # Robustness: ensure race preset is applied even if trace didn't fire
+        if race:
+            self._apply_race_preset(race)
+
         parts = [x for x in [race, gender, role] if x]
         lines.append(f"The subject is a {' '.join(parts)}." if parts else "The subject is a character.")
 
-        # race preset (auto)
         if self._race_auto_lines:
             lines.extend(self._race_auto_lines)
 
-        # age + expression
         age = self.get_single_choice("Age")
         expr= self.get_single_choice("Facial Expression")
         segs=[]
@@ -389,7 +376,6 @@ class CharacterForm:
         if expr: segs.append(f"with {expr}")
         if segs: lines.append(", ".join(segs) + ".")
 
-        # multi groups
         traits = self.gather_multi("Notable Traits")
         if traits: lines.append(f"Notable features include {', '.join(traits)}.")
         hair = self.gather_multi("Hair / Beard")
@@ -430,12 +416,10 @@ class MonsterForm:
         self.styles_map = styles_map
         self.frame = tk.Frame(parent)
 
-        # style
         tk.Label(self.frame, text="Render style", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(8, 0))
         self.style_var = tk.StringVar(value=list(styles_map.keys())[0])
         tk.OptionMenu(self.frame, self.style_var, *styles_map.keys()).pack(anchor="w", padx=20, pady=(0, 8))
 
-        # count / horde
         box = tk.Frame(self.frame); box.pack(anchor="w", fill="x", padx=10, pady=(0,6))
         tk.Label(box, text="Count", font=("Arial", 10, "bold")).pack(side="left")
         self.count_var = tk.IntVar(value=1)
@@ -443,7 +427,6 @@ class MonsterForm:
         self.horde_var = tk.BooleanVar(value=False)
         tk.Checkbutton(box, text="Horde (single scene)", variable=self.horde_var).pack(side="left", padx=12)
 
-        # singles + Other
         self.singles = {
             "Creature Type": sorted_en(["Aberration","Beast","Demon","Devil","Dragon","Elemental","Fey","Giant",
                                         "Horror","Undead","Plant","Ooze","Insectoid","Aquatic","Celestial","Nightmare",
@@ -471,7 +454,6 @@ class MonsterForm:
             tk.Label(cell, text="Other (free text)", fg="#666").pack(anchor="w")
             self.single_vars[cat] = (var, other)
 
-        # multis
         self.multis = {
             "Anatomy / Morphology": sorted_en(["Horns","Tusks","Fangs","Claws","Wings","Tail","Carapace","Chitin",
                                                "Tentacles","Multiple Eyes","Extra Limbs","Spines","Bioluminescent",
@@ -497,7 +479,6 @@ class MonsterForm:
             bottom.pack(fill="x")
             self.multi_blocks[cat] = {"items": vars_, "other_var": other}
 
-        # framing
         self.cadrage_opts = sorted_en(["Head Only","Bust","Chest-up","Half Body","Full Body","Three-Quarter View",
                                        "Profile View","Front View","Back View","Slight High Angle","Low Angle","Over-the-Shoulder",
                                        "Includes mouth and jaw"])
@@ -511,7 +492,6 @@ class MonsterForm:
         tk.Label(cbottom, text="Other framing (commas)", fg="#666").grid(row=1, column=0, sticky="w", padx=8, pady=(0,6))
         cbottom.pack(fill="x")
 
-        # actions / output
         btns = tk.Frame(self.frame); btns.pack(pady=10)
         tk.Button(btns, text="🎨 Generate", command=self.generate).pack(side="left", padx=6)
         tk.Button(btns, text="📋 Copy window", command=self.copy_win).pack(side="left", padx=6)
