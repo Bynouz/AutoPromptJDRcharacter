@@ -1,11 +1,17 @@
 import tkinter as tk
-from tkinter import messagebox
-import unicodedata, math
+from tkinter import ttk, messagebox
+import unicodedata
 
-# -------- utils --------
+# Thème/constantes partagées
+from ui import WHITE, UI_FONT_BOLD, PADX_S, PADY_S, PADY_SEC, GRID_PAD
+
+# ---------- utils ----------
 def unaccent(s: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFD", s) if not unicodedata.combining(ch))
-def sorted_en(items): return sorted(items, key=lambda s: unaccent(s).lower())
+
+def sorted_en(items):
+    return sorted(items, key=lambda s: unaccent(s).lower())
+
 def parse_custom_list(text: str):
     if not text: return []
     out = []
@@ -14,7 +20,7 @@ def parse_custom_list(text: str):
         if t: out.append(t)
     return out
 
-# -------- race presets --------
+# ---------- race presets ----------
 RACE_PRESETS = {
     "Human":{"lines":["Neutral human craniofacial proportions; subtle asymmetry; natural pores and minor blemishes."],"avoid":""},
     "Elf":{"lines":["Long pointed ears clearly visible; slender angular features, high cheekbones, almond-shaped eyes; fine smooth hair."],"avoid":"Avoid human round ears and heavy jaw."},
@@ -47,193 +53,245 @@ RACE_PRESETS = {
     "Giant":{"lines":["Massive craniofacial proportions; heavy bone structure; thick neck; oversized features emphasized by lighting."],"avoid":""},
 }
 
+HEAD_FACE_TRAITS = sorted_en([
+    "Heterochromia","Scar","Missing Eye","Blind Eye","Blindfolded","Tattooed Face","Facial Piercings",
+    "Multiple Ear Rings","Glowing Eyes","Wrinkled","Soot-covered","Blood Spatter","Runes Etched in Skin",
+    "Cracked Skin","Skeletal Features"
+])
+BODY_TRAITS = sorted_en([
+    "Tattoos","Multiple Scars","Pale Skin","Dried Blood","Tribal Markings","Veins Visible","Burn Marks",
+    "Rough textured skin with visible pores","Mouth slightly open, lower tusks visible",
+    "Small lower tusks clearly visible","Pronounced jawline","Heavy brow ridge","Broad nose","Slightly pointed ears"
+])
+
+HAIR_COLORS = sorted_en(["Black","Dark Brown","Brown","Chestnut","Auburn","Blonde","Platinum Blonde","Silver/White","Grey","Red","Salt-and-pepper","Dyed Blue","Dyed Green","Dyed Purple","Streaked"])
+EYE_COLORS  = sorted_en(["Brown","Dark Brown","Amber","Hazel","Green","Blue","Grey","Violet","Pale/Almost White","Heterochromia"])
+SKIN_TONES  = sorted_en(["Porcelain","Pale","Light","Olive","Tan","Brown","Dark Brown","Ebony","Ashen","Sallow","Freckled","Weathered","Scarred"])
+CLOTHING_PALETTES = sorted_en(["Monochrome","Muted earth tones","Black & silver","Black & gold","Crimson accents","Emerald accents","Sapphire accents","Royal purple","White & gold","Leather browns","Cold greys","Warm rust"])
+ACCENT_METALS = sorted_en(["Iron","Steel","Silver","Gold","Bronze","Copper","Brass","Blackened steel","Gunmetal","Gilded","Antique"])
+
 class CharacterForm:
-    def __init__(self, parent, styles_map, title_text=None, columns_mode=True, prompt_bus=None):
+    def __init__(self, parent, styles_map, title_text=None, prompt_bus=None):
         self.styles_map = styles_map
-        self.columns_mode = columns_mode
         self.prompt_bus = prompt_bus
-        self.frame = tk.LabelFrame(parent, text=title_text or "Character settings", font=("Arial", 10, "bold"))
+
+        # container
+        self.frame = tk.LabelFrame(parent, text=title_text or "Character settings", bg=WHITE)
+        self.frame.configure(padx=PADX_S, pady=PADY_S)
+
         self.style_var = tk.StringVar(value=list(styles_map.keys())[0])
-
-        # single-select categories
-        self.single_categories = {
-            "Race": sorted_en(list(RACE_PRESETS.keys())),
-            "Gender": sorted_en(["Male","Female","Androgynous","Unknown"]),
-            "Role / Class": sorted_en(["Alchemist","Apothecary","Archer","Artificer","Assassin","Barbarian","Bard",
-                                       "Berserker","Captain","Cleric","Commander","Commoner","Criminal","Cultist",
-                                       "Druid","Engineer","Hunter","Inquisitor","Knight","Mage","Merchant",
-                                       "Monk","Necromancer","Noble","Occultist","Paladin","Pirate","Priest",
-                                       "Ranger","Rogue","Scholar","Seer","Soldier","Sorcerer","Witch"]),
-            "Age": ["Childlike","Teenager","Young Adult","Adult","Mature (50-60)","Elderly (70+)","Ageless"],
-            "Facial Expression": sorted_en(["Calm","Compassionate","Confident","Cruel","Desperate","Determined","Angry",
-                                            "Playful","Frightened","Feral","Proud","Cold","Haunted","Worried","Mischievous",
-                                            "Wary","Mocking","Thoughtful","Wrinkled","Brooding","Smiling","Stoic","Stern",
-                                            "Sad","Hollow-eyed","Tired"]),
-            "Stature": ["Very Short","Short","Average Height","Tall","Very Tall"],
-            "Build / Body Type": ["Underweight","Slim","Lean","Average","Athletic","Muscular","Stocky","Heavyset","Plus-size","Bulky"],
-            "Attractiveness": ["Plain (1)","Average (2)","Attractive (3)","Striking (4)","Ethereal (5)"],
-            "Background / Ambience": sorted_en(["Dark Lab","Shadowy Forest","Foggy Graveyard","Collapsed Cathedral",
-                                                "Ritual Chamber","Broken Throne Room","Sewer Tunnel","Underground Market",
-                                                "City Alley","Ruined Battlefield","Torch-lit Dungeon","Alchemist Explosion",
-                                                "Moonlit Rooftop","Plain Dark Background","Stone Wall","Cave","Library",
-                                                "Workshop","Market","Temple","Throne Room","Forest Clearing","Snowy Landscape",
-                                                "Desert Dunes","Rainy Street","Cliff Edge","Mountain Pass","Night Seashore",
-                                                "Laboratory","Dungeon","Ancient Ruins"])
-        }
-
-        # multi-select categories (checkboxes)
-        self.multi_categories = {
-            "Head Hair": sorted_en(["Long Hair","Short Hair","Curly Hair","Wavy Hair","Straight Hair","Ponytail",
-                                    "Multiple Braids","Long and Braided","Messy","Shaved","Half Bald","White Streak",
-                                    "Graying Temples","Hooded"]),
-            "Facial Hair": sorted_en(["No Beard","Stubble Beard","Goatee","Mustache Only","Full/Thick Beard",
-                                      "Groomed Beard","Sideburns","Handlebar Mustache","Chevron Mustache"]),
-            "Body Hair": sorted_en(["No body hair","Light body hair","Moderate body hair","Heavy body hair",
-                                    "Chest hair","Arm hair","Leg hair","Back hair","Armpit hair","Happy trail",
-                                    "Well-groomed","Unkempt"]),
-            "Notable Traits": sorted_en([
-                "Heterochromia","Scar","Missing Eye","Burn Marks","Soot-covered","Blood Spatter","Veins Visible",
-                "Runes Etched in Skin","Cracked Skin","Blindfolded","Blind Eye","Skeletal Features","Tattooed Face",
-                "Facial Piercings","Tattoos","Multiple Scars","Pale Skin","Dried Blood","Glowing Eyes","Tribal Markings",
-                "Facial Jewelry","Multiple Ear Rings",
-                "Small lower tusks clearly visible","Pronounced jawline","Heavy brow ridge","Broad nose",
-                "Slightly pointed ears","Rough textured skin with visible pores",
-                "Mouth slightly open, lower tusks visible",
-            ]),
-            "Clothing / Armor": sorted_en(["Victorian Jacket","Surgical Coat","Plague Doctor Outfit","Tattered Cloak",
-                                           "Engraved Plate Armor","Runed Robes","Scorched Leather Armor","Merchant's Vest",
-                                           "Heavy Fur Coat","Tactical Gear","Military Uniform","Embroidered Ritual Garb",
-                                           "Simple Tunic","Hooded Cloak","Cloak","Leather Armor","Chainmail","Plate Armor",
-                                           "Robes","Tattered Robes","Rags","Noble Attire","Commoner's Clothes","Long Coat",
-                                           "Leather Gloves","High Boots","Hood","Apron","Alchemist's Coat"]),
-            "Accessories": sorted_en(["Flask","Beaker","Smoking Pipe","Ancient Book","Mechanical Eye","Ring","Amulet","Skull","Dagger",
-                                      "Staff","Cane","Scroll","Crystal Ball","Chain","Broken Mask","Medal","Exploding Vial",
-                                      "Belt Pouch","Pouches","Necklace","Earrings","Bracelets","Gloves","Lantern","Torch",
-                                      "Coiled Rope","Satchel","Backpack","Quiver","Bow","Crossbow","Sword","Shield","Axe",
-                                      "Mace","Spear","Crown","Diadem","Mechanical Gauntlet","Keys","Vials","Bottle","Jeweled Ring"]),
-            "Framing": sorted_en(["Head Only","Bust","Chest-up","Half Body","Square Portrait","Tight Portrait","Asymmetrical Frame",
-                                  "Medium Long Shot","Full Body","Three-Quarter View","Profile View","Front View","Back View",
-                                  "Slight High Angle","Low Angle","Over-the-Shoulder","Includes mouth and jaw"])
-        }
-
+        self.single_vars = {}
+        self.multi_blocks = {}
         self._race_auto_lines, self._race_avoid_line = [], ""
-        self.gritty_var = tk.BooleanVar(value=True)  # global toggle
+        self.gritty_var = tk.BooleanVar(value=True)
+        self.energy_var = tk.BooleanVar(value=True)
         self._last_prompt = ""
+        self._race_hint_label = None
 
         self._build_ui()
 
+    # ---------- aligned grid helpers ----------
+    _grid_rows = {}
+    def _make_grid(self, parent):
+        f = tk.Frame(parent, bg=WHITE)
+        f.grid_columnconfigure(0, minsize=140, weight=0)
+        f.grid_columnconfigure(1, minsize=180, weight=0)
+        f.grid_columnconfigure(2, weight=1)
+        f.grid_columnconfigure(3, minsize=46,  weight=0)
+        self._grid_rows[f] = 0
+        return f
+
+    def _add_single_row(self, grid_parent, label, options, key, race_preset=False, width=20):
+        r = self._grid_rows[grid_parent]
+        ttk.Label(grid_parent, text=label, style="Bold.TLabel").grid(row=r, column=0, sticky="w", padx=(0,8), pady=(PADY_S, PADY_S))
+        var = tk.StringVar(value="— (leave empty) —")
+        if race_preset:
+            var.trace_add("write", lambda *_a, v=var: self._apply_race_preset(v.get()))
+        combo = ttk.Combobox(grid_parent, textvariable=var, values=["— (leave empty) —"]+list(options),
+                             state="readonly", width=width, style="Compact.TCombobox")
+        combo.grid(row=r, column=1, sticky="w", pady=(PADY_S, PADY_S))
+        other = tk.StringVar()
+        ttk.Entry(grid_parent, textvariable=other).grid(row=r, column=2, sticky="ew", padx=(8,0), pady=(PADY_S, PADY_S))
+        ttk.Label(grid_parent, text="Other").grid(row=r, column=3, sticky="w", padx=(6,0), pady=(PADY_S, PADY_S))
+        self.single_vars[key] = (var, other)
+        self._grid_rows[grid_parent] = r + 1
+
+    def _add_multi_block(self, parent, title, options, key, columns=2, grid=False, grid_rc=(0,0)):
+        block = tk.LabelFrame(parent, text=title, bg=WHITE)
+        items = []
+        rows = max(1, (len(options) + columns - 1)//columns)
+        for idx, opt in enumerate(options):
+            v = tk.BooleanVar()
+            cb = ttk.Checkbutton(block, text=opt, variable=v)
+            r, c = idx % rows, idx // rows
+            block.grid_columnconfigure(c, weight=1, uniform=f"{key}_cols")
+            cb.grid(row=r, column=c, sticky="w", padx=(4,4), pady=(GRID_PAD, GRID_PAD))
+            items.append((opt, v))
+        bottom = tk.Frame(block, bg=WHITE)
+        bottom.grid(row=rows, column=0, columnspan=columns, sticky="ew")
+        other_var = tk.StringVar()
+        ttk.Entry(bottom, textvariable=other_var).grid(row=0, column=0, sticky="ew", padx=(4,4), pady=(4,2))
+        ttk.Label(bottom, text="Other (comma separated)").grid(row=0, column=1, sticky="w", padx=(6,0))
+        bottom.grid_columnconfigure(0, weight=1)
+        self.multi_blocks[key] = {"frame": block, "items": items, "other_var": other_var}
+        if grid:
+            r, c = grid_rc; block.grid(row=r, column=c, sticky="nsew", padx=4, pady=PADY_SEC)
+        else:
+            block.pack(anchor="w", fill="x", pady=PADY_SEC)
+        return block
+
+    # ---------- UI ----------
     def _build_ui(self):
-        tk.Label(self.frame, text="Render style", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(8,0))
-        tk.OptionMenu(self.frame, self.style_var, *self.styles_map.keys()).pack(anchor="w", padx=20, pady=(0,8))
+        header = tk.Frame(self.frame, bg=WHITE); header.pack(anchor="w", fill="x", pady=PADY_SEC)
+        ttk.Label(header, text="Render style", style="Bold.TLabel").pack(side="left")
+        ttk.Combobox(header, textvariable=self.style_var, values=list(self.styles_map.keys()),
+                     state="readonly", width=28, style="Compact.TCombobox").pack(side="left", padx=(8,0))
 
-        self.single_vars = {}
-        self.single_block = tk.LabelFrame(self.frame, text="Main characteristics", font=("Arial", 10, "bold"))
-        self.single_block.pack(anchor="w", fill="x", padx=10, pady=6)
-        self._single_cells = []
+        # Identity
+        sec_identity = tk.LabelFrame(self.frame, text="Identity & Core", bg=WHITE)
+        sec_identity.pack(anchor="w", fill="x", pady=PADY_SEC)
+        grid_id = self._make_grid(sec_identity); grid_id.pack(fill="x")
+        self._add_single_row(grid_id, "Race", sorted_en(list(RACE_PRESETS.keys())), "Race", race_preset=True, width=20)
+        self._add_single_row(grid_id, "Gender", sorted_en(["Male","Female","Androgynous","Unknown"]), "Gender", width=18)
+        self._add_single_row(grid_id, "Role / Class", sorted_en([
+            "Alchemist","Apothecary","Archer","Artificer","Assassin","Barbarian","Bard","Berserker","Captain",
+            "Cleric","Commander","Commoner","Criminal","Cultist","Druid","Engineer","Hunter","Inquisitor",
+            "Knight","Mage","Merchant","Monk","Necromancer","Noble","Occultist","Paladin","Pirate","Priest",
+            "Ranger","Rogue","Scholar","Seer","Soldier","Sorcerer","Witch"
+        ]), "Role / Class", width=22)
+        self._add_single_row(grid_id, "Age", ["Childlike","Teenager","Young Adult","Adult","Mature (50-60)","Elderly (70+)","Ageless"], "Age", width=18)
+        self._add_single_row(grid_id, "Facial Expression", sorted_en([
+            "Calm","Compassionate","Confident","Cruel","Desperate","Determined","Angry","Playful","Frightened","Feral",
+            "Proud","Cold","Haunted","Worried","Mischievous","Wary","Mocking","Thoughtful","Wrinkled","Brooding",
+            "Smiling","Stoic","Stern","Sad","Hollow-eyed","Tired"
+        ]), "Facial Expression", width=22)
 
-        for cat, options in self.single_categories.items():
-            cell = tk.Frame(self.single_block)
-            tk.Label(cell, text=cat, font=("Arial",10,"bold"), anchor="w").pack(anchor="w")
-            var = tk.StringVar(value="— (leave empty) —")
-            if cat == "Race":
-                var.trace_add("write", lambda *_a, v=var: self._apply_race_preset(v.get()))
-            tk.OptionMenu(cell, var, "— (leave empty) —", *options).pack(fill="x", pady=(2,2))
-            other = tk.StringVar()
-            tk.Entry(cell, textvariable=other).pack(fill="x")
-            tk.Label(cell, text="Other (free text)", fg="#666").pack(anchor="w")
-            self.single_vars[cat] = (var, other)
-            self._single_cells.append(cell)
-            if cat == "Race":
-                self.race_hint = tk.Label(cell, text="", fg="#666", wraplength=420, justify="left")
-                self.race_hint.pack(anchor="w", pady=(6,0))
+        # Head & Face (3 colonnes côte à côte)
+        sec_head = tk.LabelFrame(self.frame, text="Head & Face", bg=WHITE); sec_head.pack(anchor="w", fill="x", pady=PADY_SEC)
+        row_head = tk.Frame(sec_head, bg=WHITE); row_head.pack(fill="x")
+        for i in range(3): row_head.grid_columnconfigure(i, weight=1, uniform="headrow")
 
-        grit_box = tk.Frame(self.frame); grit_box.pack(anchor="w", fill="x", padx=10, pady=(0,8))
-        tk.Checkbutton(grit_box, text="Gritty realism (no beauty retouching)", variable=self.gritty_var).pack(anchor="w")
+        self._add_multi_block(row_head, "Head Hair", sorted_en([
+            "Long Hair","Short Hair","Curly Hair","Wavy Hair","Straight Hair","Ponytail","Multiple Braids",
+            "Long and Braided","Messy","Shaved","Half Bald","White Streak","Graying Temples","Hooded"
+        ]), "Head Hair", columns=2, grid=True, grid_rc=(0,0))
+        self._add_multi_block(row_head, "Facial Hair", sorted_en([
+            "No Beard","Stubble Beard","Goatee","Mustache Only","Full/Thick Beard","Groomed Beard",
+            "Sideburns","Handlebar Mustache","Chevron Mustache"
+        ]), "Facial Hair", columns=2, grid=True, grid_rc=(0,1))
+        self._add_multi_block(row_head, "Head/Face Traits", HEAD_FACE_TRAITS, "Head/Face Traits", columns=2, grid=True, grid_rc=(0,2))
 
-        self.check_blocks = {}
-        for category, options in self.multi_categories.items():
-            block = tk.LabelFrame(self.frame, text=category, font=("Arial", 10, "bold"))
-            block.pack(anchor="w", fill="x", padx=10, pady=6)
-            items, labels = [], []
-            for opt in options:
-                v = tk.BooleanVar()
-                cb = tk.Checkbutton(block, text=opt, variable=v, anchor="w", justify="left")
-                labels.append(cb); items.append((opt, v))
-            bottom = tk.Frame(block); other_var = tk.StringVar()
-            ent = tk.Entry(bottom, textvariable=other_var); lab = tk.Label(bottom, text="Other (comma separated)", fg="#666")
-            bottom.grid_columnconfigure(0, weight=1)
-            ent.grid(row=0, column=0, sticky="ew", padx=8, pady=(8,4))
-            lab.grid(row=1, column=0, sticky="w", padx=8, pady=(0,6))
-            self.check_blocks[category] = {"frame": block, "labels": labels, "items": items, "bottom": bottom, "other_var": other_var}
+        # Body & Build
+        sec_body = tk.LabelFrame(self.frame, text="Body & Build", bg=WHITE); sec_body.pack(anchor="w", fill="x", pady=PADY_SEC)
+        grid_body = self._make_grid(sec_body); grid_body.pack(fill="x")
+        self._add_single_row(grid_body, "Stature", ["Very Short","Short","Average Height","Tall","Very Tall"], "Stature", width=16)
+        self._add_single_row(grid_body, "Build / Body Type", ["Underweight","Slim","Lean","Average","Athletic","Muscular","Stocky","Heavyset","Plus-size","Bulky"], "Build / Body Type", width=20)
+        self._add_single_row(grid_body, "Attractiveness", ["Plain (1)","Average (2)","Attractive (3)","Striking (4)","Ethereal (5)"], "Attractiveness", width=16)
 
-        btns = tk.Frame(self.frame); btns.pack(pady=10)
-        tk.Button(btns, text="🎨 Generate prompt", command=self.generate_prompt).pack(side="left", padx=6)
-        tk.Button(btns, text="📋 Copy window", command=self.open_copy_window).pack(side="left", padx=6)
+        row_body = tk.Frame(sec_body, bg=WHITE); row_body.pack(fill="x")
+        for i in range(2): row_body.grid_columnconfigure(i, weight=1, uniform="bodyrow")
+        self._add_multi_block(row_body, "Body Hair", sorted_en([
+            "No body hair","Light body hair","Moderate body hair","Heavy body hair","Chest hair","Arm hair",
+            "Leg hair","Back hair","Armpit hair","Happy trail","Well-groomed","Unkempt"
+        ]), "Body Hair", columns=2, grid=True, grid_rc=(0,0))
+        self._add_multi_block(row_body, "Body Traits", BODY_TRAITS, "Body Traits", columns=2, grid=True, grid_rc=(0,1))
 
-        # Add-to-group
+        # Outfit & Gear
+        sec_outfit = tk.LabelFrame(self.frame, text="Outfit & Gear", bg=WHITE); sec_outfit.pack(anchor="w", fill="x", pady=PADY_SEC)
+        row_out = tk.Frame(sec_outfit, bg=WHITE); row_out.pack(fill="x")
+        for i in range(2): row_out.grid_columnconfigure(i, weight=1, uniform="outrow")
+        self._add_multi_block(row_out, "Clothing / Armor", sorted_en([
+            "Victorian Jacket","Surgical Coat","Plague Doctor Outfit","Tattered Cloak","Engraved Plate Armor","Runed Robes",
+            "Scorched Leather Armor","Merchant's Vest","Heavy Fur Coat","Tactical Gear","Military Uniform",
+            "Embroidered Ritual Garb","Simple Tunic","Hooded Cloak","Cloak","Leather Armor","Chainmail","Plate Armor",
+            "Robes","Tattered Robes","Rags","Noble Attire","Commoner's Clothes","Long Coat","Leather Gloves",
+            "High Boots","Hood","Apron","Alchemist's Coat"
+        ]), "Clothing / Armor", columns=2, grid=True, grid_rc=(0,0))
+        self._add_multi_block(row_out, "Accessories", sorted_en([
+            "Flask","Beaker","Smoking Pipe","Ancient Book","Mechanical Eye","Ring","Amulet","Skull","Dagger","Staff","Cane",
+            "Scroll","Crystal Ball","Chain","Broken Mask","Medal","Exploding Vial","Belt Pouch","Pouches","Necklace",
+            "Earrings","Bracelets","Gloves","Lantern","Torch","Coiled Rope","Satchel","Backpack","Quiver","Bow",
+            "Crossbow","Sword","Shield","Axe","Mace","Spear","Crown","Diadem","Mechanical Gauntlet","Keys","Vials","Bottle","Jeweled Ring"
+        ]), "Accessories", columns=2, grid=True, grid_rc=(0,1))
+
+        # Colors
+        sec_colors = tk.LabelFrame(self.frame, text="Colors (optional)", bg=WHITE); sec_colors.pack(anchor="w", fill="x", pady=PADY_SEC)
+        grid_col = self._make_grid(sec_colors); grid_col.pack(fill="x")
+        self._add_single_row(grid_col, "Hair Color", HAIR_COLORS, "Hair Color", width=16)
+        self._add_single_row(grid_col, "Eye Color", EYE_COLORS, "Eye Color", width=16)
+        self._add_single_row(grid_col, "Skin Tone", SKIN_TONES, "Skin Tone", width=16)
+        self._add_single_row(grid_col, "Clothing Palette", CLOTHING_PALETTES, "Clothing Palette", width=18)
+        self._add_single_row(grid_col, "Accents / Metals", ACCENT_METALS, "Accents / Metals", width=16)
+
+        # Scene & Framing
+        sec_scene = tk.LabelFrame(self.frame, text="Scene & Framing", bg=WHITE); sec_scene.pack(anchor="w", fill="x", pady=PADY_SEC)
+        grid_sc = self._make_grid(sec_scene); grid_sc.pack(fill="x")
+        self._add_single_row(grid_sc, "Background / Ambience", sorted_en([
+            "Dark Lab","Shadowy Forest","Foggy Graveyard","Collapsed Cathedral","Ritual Chamber","Broken Throne Room",
+            "Sewer Tunnel","Underground Market","City Alley","Ruined Battlefield","Torch-lit Dungeon","Alchemist Explosion",
+            "Moonlit Rooftop","Plain Dark Background","Stone Wall","Cave","Library","Workshop","Market","Temple",
+            "Throne Room","Forest Clearing","Snowy Landscape","Desert Dunes","Rainy Street","Cliff Edge","Mountain Pass",
+            "Night Seashore","Laboratory","Dungeon","Ancient Ruins"
+        ]), "Background / Ambience", width=26)
+        self._add_multi_block(sec_scene, "Framing", sorted_en([
+            "Head Only","Bust","Chest-up","Half Body","Square Portrait","Tight Portrait","Asymmetrical Frame",
+            "Medium Long Shot","Full Body","Three-Quarter View","Profile View","Front View","Back View",
+            "Slight High Angle","Low Angle","Over-the-Shoulder","Includes mouth and jaw"
+        ]), "Framing", columns=4)
+
+        # Motion & Camera
+        sec_motion = tk.LabelFrame(self.frame, text="Motion & Camera", bg=WHITE); sec_motion.pack(anchor="w", fill="x", pady=PADY_SEC)
+        grid_mo = self._make_grid(sec_motion); grid_mo.pack(fill="x")
+        self._add_single_row(grid_mo, "Pose / Action Beat", [
+            "Subtle torso twist","Head turned mid-motion","Leaning forward","Looking back over shoulder",
+            "Shoulder drop + neck tilt","Looming toward camera","Hand entering frame","Mid-step shift of weight"
+        ], "Pose / Action Beat", width=26)
+        self._add_single_row(grid_mo, "Gaze Direction", [
+            "Off-camera (left)","Off-camera (right)","Downcast","Upward glance","Eyes to camera","Half-lidded squint"
+        ], "Gaze Direction", width=24)
+        self._add_single_row(grid_mo, "Camera / Lens", [
+            "85mm portrait calm","50mm cinematic","35mm close dynamic","24mm wide slight distortion","Low angle","Slight Dutch angle"
+        ], "Camera / Lens", width=26)
+        toggles = tk.Frame(sec_motion, bg=WHITE); toggles.pack(anchor="w", fill="x", pady=(PADY_S,0))
+        ttk.Checkbutton(toggles, text="Gritty realism (no beauty retouching)", variable=self.gritty_var).pack(side="left")
+        ttk.Checkbutton(toggles, text="Inject motion & energy", variable=self.energy_var).pack(side="left", padx=(12,0))
+
+        # actions & output
+        btns = tk.Frame(self.frame, bg=WHITE); btns.pack(pady=(6,4))
+        ttk.Button(btns, text="🎨 Generate prompt", command=self.generate_prompt).pack(side="left", padx=6)
+        ttk.Button(btns, text="📋 Copy window", command=self.open_copy_window).pack(side="left", padx=6)
         if self.prompt_bus:
-            tk.Button(btns, text="➕ Add to Group", command=self.add_to_group).pack(side="left", padx=6)
+            ttk.Button(btns, text="➕ Add to Group", command=self.add_to_group).pack(side="left", padx=6)
 
-        self.output = tk.Text(self.frame, height=8, wrap="word")
-        self.output.pack(padx=10, pady=10, fill="both", expand=True)
+        self.output = tk.Text(self.frame, height=7, wrap="word", bg=WHITE)
+        self.output.pack(padx=PADX_S, pady=(4,8), fill="both", expand=True)
 
-        self._last_cols = None
-        self.frame.bind("<Configure>", self._on_resize)
-        self._relayout()
-
-    # layout helpers
-    def _columns_for_width(self, w):
-        if not self.columns_mode: return 1
-        if w < 520: return 1
-        if w < 760: return 2
-        if w < 1000: return 3
-        if w < 1240: return 4
-        return 5
-    def _relayout(self):
-        w = self.frame.winfo_width() or 1000
-        cols = self._columns_for_width(w)
-        if cols == self._last_cols: return
-        self._last_cols = cols
-        for wdg in self.single_block.grid_slaves(): wdg.grid_forget()
-        n = len(self._single_cells)
-        import math as _m
-        rows = max(1, _m.ceil(n/cols))
-        for i, cell in enumerate(self._single_cells):
-            r, c = i % rows, i // rows
-            self.single_block.grid_columnconfigure(c, weight=1, uniform="singcols")
-            cell.grid(row=r, column=c, sticky="nsew", padx=8, pady=6)
-        for cat, data in self.check_blocks.items():
-            block = data["frame"]; labels = data["labels"]; bottom = data["bottom"]
-            for wdg in block.grid_slaves(): wdg.grid_forget()
-            rows = max(1, _m.ceil(len(labels)/cols))
-            for c in range(cols):
-                block.grid_columnconfigure(c, weight=1, uniform=f"{cat}_cols")
-            for idx, cb in enumerate(labels):
-                r, c = idx % rows, idx // rows
-                cb.grid(row=r, column=c, sticky="w", padx=8, pady=2)
-            bottom.grid(row=rows, column=0, columnspan=cols, sticky="ew")
-    def _on_resize(self, _e=None): self._relayout()
-
-    # data helpers
+    # ---------- helpers / prompt ----------
     def _apply_race_preset(self, race_value: str):
         if race_value.startswith("—"):
             self._race_auto_lines, self._race_avoid_line = [], ""
-            if hasattr(self, "race_hint"): self.race_hint.configure(text="")
+            if self._race_hint_label: self._race_hint_label.destroy(); self._race_hint_label = None
             return
         p = RACE_PRESETS.get(race_value)
         if p:
             self._race_auto_lines = list(p.get("lines", []))
             self._race_avoid_line = p.get("avoid", "")
-            if hasattr(self, "race_hint"):
-                hint = "Race preset added: " + " ".join(self._race_auto_lines)
-                if self._race_avoid_line: hint += f"  [Avoid: {self._race_avoid_line}]"
-                self.race_hint.configure(text=hint)
+            hint = "Race preset added: " + " ".join(self._race_auto_lines)
+            if self._race_avoid_line: hint += f"  [Avoid: {self._race_avoid_line}]"
+            if not self._race_hint_label:
+                for w in self.frame.winfo_children():
+                    if isinstance(w, tk.LabelFrame) and w.cget("text") == "Identity & Core":
+                        self._race_hint_label = ttk.Label(w, text=hint, wraplength=700)
+                        self._race_hint_label.pack(anchor="w", pady=(2,0))
+                        break
+            else:
+                self._race_hint_label.configure(text=hint)
         else:
             self._race_auto_lines, self._race_avoid_line = [], ""
-            if hasattr(self, "race_hint"): self.race_hint.configure(text="")
+            if self._race_hint_label: self._race_hint_label.destroy(); self._race_hint_label = None
 
-    def get_single_choice(self, cat):
-        pair = self.single_vars.get(cat)
+    def get_single_choice(self, key):
+        pair = self.single_vars.get(key)
         if not pair: return None
         var, other = pair
         txt = other.get().strip()
@@ -241,8 +299,8 @@ class CharacterForm:
         v = var.get()
         return None if v.startswith("—") else v
 
-    def gather_multi(self, cat):
-        block = self.check_blocks.get(cat)
+    def gather_multi(self, key):
+        block = self.multi_blocks.get(key)
         if not block: return []
         vals = [opt for opt, var in block["items"] if var.get()]
         vals += parse_custom_list(block["other_var"].get())
@@ -256,7 +314,6 @@ class CharacterForm:
         if race: self._apply_race_preset(race)
         parts = [x for x in [race, gender, role] if x]
         lines.append(f"The subject is a {' '.join(parts)}." if parts else "The subject is a character.")
-
         if self._race_auto_lines: lines.extend(self._race_auto_lines)
 
         age = self.get_single_choice("Age"); expr = self.get_single_choice("Facial Expression")
@@ -264,6 +321,13 @@ class CharacterForm:
         if age: segs.append(f"approximately {age}")
         if expr: segs.append(f"with {expr}")
         if segs: lines.append(", ".join(segs) + ".")
+
+        pose = self.get_single_choice("Pose / Action Beat")
+        gaze = self.get_single_choice("Gaze Direction")
+        cam  = self.get_single_choice("Camera / Lens")
+        if pose: lines.append(f"Pose/action: {pose}.")
+        if gaze: lines.append(f"Gaze: {gaze}.")
+        if cam:  lines.append(f"Camera/lens: {cam}.")
 
         stat = self.get_single_choice("Stature"); build = self.get_single_choice("Build / Body Type")
         sb = []
@@ -278,28 +342,49 @@ class CharacterForm:
         if self.gritty_var.get():
             lines.append("Use gritty realism; avoid beauty portrait, glam makeup, and skin smoothing.")
 
-        head_hair = self.gather_multi("Head Hair")
+        head_hair   = self.gather_multi("Head Hair")
         facial_hair = self.gather_multi("Facial Hair")
-        body_hair = self.gather_multi("Body Hair")
-        if head_hair: lines.append(f"Head hair: {', '.join(head_hair)}.")
+        body_hair   = self.gather_multi("Body Hair")
+        if head_hair:   lines.append(f"Head hair: {', '.join(head_hair)}.")
         if facial_hair: lines.append(f"Facial hair: {', '.join(facial_hair)}.")
-        if body_hair: lines.append(f"Body hair: {', '.join(body_hair)}.")
+        if body_hair:   lines.append(f"Body hair: {', '.join(body_hair)}.")
 
-        traits = self.gather_multi("Notable Traits")
+        head_traits = self.gather_multi("Head/Face Traits")
+        body_traits = self.gather_multi("Body Traits")
+        traits = head_traits + body_traits
         if traits: lines.append(f"Notable features include {', '.join(traits)}.")
+
         clothes = self.gather_multi("Clothing / Armor"); acc = self.gather_multi("Accessories")
         if clothes and acc: lines.append(f"They wear {', '.join(clothes)}, along with {', '.join(acc)}.")
         elif clothes: lines.append(f"They wear {', '.join(clothes)}.")
         elif acc: lines.append(f"They carry {', '.join(acc)}.")
+
+        # Colors
+        col_parts = []
+        for key, label in [("Hair Color","hair"),("Eye Color","eyes"),("Skin Tone","skin"),
+                           ("Clothing Palette","clothing"),("Accents / Metals","accents/metals")]:
+            val = self.get_single_choice(key)
+            if val: col_parts.append(f"{label} — {val}")
+        if col_parts:
+            if "black-and-white" in intro.lower() or "monochrome" in intro.lower():
+                lines.append("Color cues (use as tonal accents in monochrome): " + "; ".join(col_parts) + ".")
+            else:
+                lines.append("Color palette: " + "; ".join(col_parts) + ".")
 
         bg = self.get_single_choice("Background / Ambience")
         if bg: lines.append(f"The scene is set against a {bg} background.")
         cadr = self.gather_multi("Framing")
         if cadr: lines.append(f"Shown from {', '.join(cadr)}.")
 
+        if self.energy_var.get():
+            if not pose: lines.append("Pose/action: subtle torso twist with asymmetrical shoulders.")
+            lines.append("Motion cues: strands of hair in motion, cloak flutter.")
+            lines.append("Environmental motion: drifting dust motes / faint embers in air.")
+
         if self._race_avoid_line: lines.append(f"Avoid: {self._race_avoid_line}")
         return lines
 
+    # ---------- actions ----------
     def generate_prompt(self):
         text = " ".join(self.build_character_lines())
         self._last_prompt = text
@@ -311,7 +396,7 @@ class CharacterForm:
         gender = self.get_single_choice("Gender") or ""
         role = self.get_single_choice("Role / Class") or ""
         parts = [p for p in [race, gender, role] if p]
-        return " ".join(parts) if parts else "Character"
+        return "Character" if not parts else " ".join(parts)
 
     def add_to_group(self):
         if not self._last_prompt.strip():
@@ -329,9 +414,9 @@ class CharacterForm:
         if not txt:
             messagebox.showwarning("No prompt", "Generate a prompt before opening the copy window.")
             return
-        win = tk.Toplevel(self.frame); win.title("Copy"); win.geometry("760x420")
-        t = tk.Text(win, wrap="word"); t.pack(fill="both", expand=True, padx=10, pady=10)
+        win = tk.Toplevel(self.frame); win.title("Copy"); win.configure(bg=WHITE); win.geometry("760x420")
+        t = tk.Text(win, wrap="word", bg=WHITE); t.pack(fill="both", expand=True, padx=8, pady=8)
         t.insert("1.0", txt); t.focus_set(); t.tag_add("sel","1.0","end")
-        tk.Button(win, text="Copy to clipboard",
-                  command=lambda: (self.frame.clipboard_clear(), self.frame.clipboard_append(t.get("1.0","end-1c")),
-                                   messagebox.showinfo("Copied","Prompt copied to clipboard."))).pack(pady=6)
+        ttk.Button(win, text="Copy to clipboard",
+                   command=lambda: (self.frame.clipboard_clear(), self.frame.clipboard_append(t.get("1.0","end-1c")),
+                                    messagebox.showinfo("Copied","Prompt copied to clipboard."))).pack(pady=6)
