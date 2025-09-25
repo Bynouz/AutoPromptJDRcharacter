@@ -1,3 +1,4 @@
+# main.py
 import tkinter as tk
 from tkinter import ttk, messagebox
 import traceback
@@ -6,13 +7,13 @@ from solocharacter import CharacterForm
 from groupcharacter import GroupForm
 from monsters import MonsterForm
 
+# UI partagé
+from ui import apply_theme, ScrollFrame, WHITE
 
 # ---------- Shared Prompt Bus ----------
 class PromptBus:
     """
-    Shared in-memory roster for group mixing.
-    Characters/Monsters push prompts here via 'Add to Group'.
-    Duplicates allowed. Max 12 items.
+    In-memory roster for group mixing (characters + monsters).
     Each item: {"type": "character"|"monster", "label": str, "text": str, "weight": int}
     """
     MAX_ITEMS = 12
@@ -22,7 +23,6 @@ class PromptBus:
         self.listeners = []
 
     def register(self, callback):
-        """Register a listener; immediately notify with current items."""
         self.listeners.append(callback)
         callback(list(self.items))
 
@@ -42,7 +42,6 @@ class PromptBus:
     def add_monster(self, label, text, weight=3):
         self.add({"type": "monster", "label": label or "Monster", "text": text, "weight": int(weight)})
 
-    # Mutations for Group UI
     def move_up(self, idx):
         if 0 < idx < len(self.items):
             self.items[idx-1], self.items[idx] = self.items[idx], self.items[idx-1]
@@ -68,42 +67,16 @@ class PromptBus:
             self._notify()
 
 
-# ---------- Scrollable container ----------
-class ScrollFrame(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.canvas = tk.Canvas(self, highlightthickness=0)
-        self.vscroll = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=self.vscroll.set)
-
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.vscroll.pack(side="right", fill="y")
-
-        self.interior = tk.Frame(self.canvas)
-        self._win_id = self.canvas.create_window((0, 0), window=self.interior, anchor="nw")
-
-        self.interior.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self._win_id, width=e.width))
-
-        self._bind_mousewheel(self.canvas)
-
-    def _bind_mousewheel(self, widget):
-        # Windows / Mac
-        widget.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
-        # Linux/X11
-        widget.bind_all("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"), add="+")
-        widget.bind_all("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"), add="+")
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 else 1, "units")
-
-
 # ---------- App ----------
 class App:
     def __init__(self, root):
         root.title("Simplified Character Generation")
         root.minsize(1000, 680)
 
+        # 1) Appliquer le thème blanc compact UNE SEULE FOIS
+        apply_theme(root)
+
+        # 2) Styles d’image partagés
         styles_map = {
             "Dark Fantasy (B/W)": "A black-and-white, highly detailed portrait in dark fantasy or gothic style, charcoal or ink rendering.",
             "Heroic Fantasy (color)": "A vibrant, full-color heroic fantasy character portrait, painted illustration.",
@@ -117,25 +90,25 @@ class App:
             "Cinematic Concept Art": "A cinematic concept art portrait, painterly and high detail."
         }
 
-        # Shared bus for group mixing
+        # Bus partagé pour l’onglet Groupe
         self.bus = PromptBus()
 
         nb = ttk.Notebook(root)
         nb.pack(fill="both", expand=True)
 
-        # Character tab
+        # Onglet Character
         tab1 = ScrollFrame(nb)
         nb.add(tab1, text="Character")
         self.char_form = CharacterForm(tab1.interior, styles_map, prompt_bus=self.bus)
         self.char_form.frame.pack(anchor="w", fill="x", padx=8, pady=8)
 
-        # Group tab (mixer)
+        # Onglet Group (mixer)
         tab2 = ScrollFrame(nb)
         nb.add(tab2, text="Group")
         self.group_form = GroupForm(tab2.interior, styles_map, prompt_bus=self.bus)
         self.group_form.frame.pack(anchor="w", fill="x", padx=8, pady=8)
 
-        # Monsters tab
+        # Onglet Monsters
         tab3 = ScrollFrame(nb)
         nb.add(tab3, text="Monsters")
         self.monster_form = MonsterForm(tab3.interior, styles_map, prompt_bus=self.bus)
